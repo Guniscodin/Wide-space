@@ -414,8 +414,11 @@ def run_gui(ws: WideSpace, start_minimized: bool) -> None:
     import tkinter as tk
     from tkinter import ttk
 
-    BG, CARD, TEXT, MUTED = "#f4f5f7", "#ffffff", "#202124", "#5f6368"
-    GREEN, RED, GRAY = "#1a8f3c", "#c0392b", "#9aa0a6"
+    # Soft dark theme: off-white on charcoal (pure white on black is harsher
+    # to read, which matters for the dyslexia use case).
+    BG, CARD, TEXT, MUTED = "#16181d", "#20242b", "#e6e8eb", "#8b929c"
+    LINE = "#2f343d"                          # subtle borders
+    GREEN, RED, GRAY = "#3ccf85", "#f0786c", "#3a3f47"
     FONT = "Verdana" if IS_WIN else "DejaVu Sans"   # wide, clear letterforms
 
     root = tk.Tk()
@@ -444,6 +447,23 @@ def run_gui(ws: WideSpace, start_minimized: bool) -> None:
 
     set_window_icon()
 
+    # --- dark title bar (Windows 10/11); does nothing elsewhere
+    def dark_titlebar() -> None:
+        if not IS_WIN:
+            return
+        try:
+            root.update_idletasks()
+            hwnd = ctypes.windll.user32.GetParent(root.winfo_id())
+            on = ctypes.c_int(1)
+            for attr in (20, 19):   # 20 = Win10 20H1+ / Win11, 19 = older Win10
+                if ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                        hwnd, attr, ctypes.byref(on), ctypes.sizeof(on)) == 0:
+                    break
+        except Exception:
+            log.exception("could not set dark title bar")
+
+    dark_titlebar()
+
     def px(v: float) -> int:
         return int(v * k)
 
@@ -452,10 +472,18 @@ def run_gui(ws: WideSpace, start_minimized: bool) -> None:
         style.theme_use("clam")
     except tk.TclError:
         pass
-    style.configure("TButton", font=(FONT, 10), padding=(px(14), px(6)))
-    style.configure("TCheckbutton", background=BG, foreground=TEXT, font=(FONT, 10))
-    style.map("TCheckbutton", background=[("active", BG)])
-    style.configure("Horizontal.TScale", background=BG, troughcolor="#cfd4da")
+    style.configure(".", background=BG)
+    style.configure("TButton", font=(FONT, 10), padding=(px(14), px(6)),
+                    background=CARD, foreground=TEXT, bordercolor=LINE,
+                    lightcolor=CARD, darkcolor=CARD, focuscolor=CARD)
+    style.map("TButton", background=[("active", LINE), ("pressed", LINE)])
+    style.configure("TCheckbutton", background=BG, foreground=TEXT, font=(FONT, 10),
+                    indicatorbackground=CARD, indicatorforeground=GREEN,
+                    upperbordercolor=LINE, lowerbordercolor=LINE, focuscolor=BG)
+    style.map("TCheckbutton", background=[("active", BG)],
+              indicatorbackground=[("active", CARD)])
+    style.configure("Horizontal.TScale", background=GREEN, troughcolor=CARD,
+                    bordercolor=LINE, lightcolor=GREEN, darkcolor=GREEN)
 
     body = tk.Frame(root, bg=BG, padx=px(24), pady=px(20))
     body.pack(fill="both", expand=True)
@@ -488,9 +516,10 @@ def run_gui(ws: WideSpace, start_minimized: bool) -> None:
         m = px(4)
         kx = SW_W - SW_H + m if on else m
         canvas.create_oval(kx, m, kx + SW_H - 2 * m, SW_H - m,
-                           fill="white", outline="white")
+                           fill=TEXT, outline=TEXT)
         canvas.create_text(px(24) if on else SW_W - px(26), SW_H // 2,
-                           text="ON" if on else "OFF", fill="white",
+                           text="ON" if on else "OFF",
+                           fill="#0d2416" if on else "#c5c9cf",
                            font=(FONT, 9, "bold"))
 
     state_lbl = tk.Label(row, font=(FONT, 14, "bold"), bg=BG)
@@ -498,7 +527,7 @@ def run_gui(ws: WideSpace, start_minimized: bool) -> None:
 
     # --- width slider + live preview
     tk.Label(body, text="How wide should the gaps be?", font=(FONT, 11, "bold"),
-             bg=BG, fg=TEXT).pack(anchor="w", pady=(px(20), px(4)))
+             bg=BG, fg=TEXT).pack(anchor="w", pady=(px(10), px(4)))
     srow = tk.Frame(body, bg=BG)
     srow.pack(fill="x")
     scale = ttk.Scale(srow, from_=MIN_SPACES, to=MAX_SPACES,
@@ -508,8 +537,9 @@ def run_gui(ws: WideSpace, start_minimized: bool) -> None:
     num.pack(side="left", padx=(px(12), 0))
 
     preview = tk.Label(body, bg=CARD, fg=TEXT, font=(FONT, 15), anchor="w",
-                       justify="left", padx=px(16), pady=px(12), relief="solid",
-                       bd=1, wraplength=px(340), height=2)
+                       justify="left", padx=px(16), pady=px(12), relief="flat",
+                       bd=0, highlightthickness=1, highlightbackground=LINE,
+                       wraplength=px(340), height=2)
     preview.pack(fill="x", pady=(px(10), 0))
 
     ui = {"save_job": None, "snap": False}
@@ -517,7 +547,7 @@ def run_gui(ws: WideSpace, start_minimized: bool) -> None:
     def render(n: int) -> None:
         num.config(text=str(n))
         sp = " " * n
-        preview.config(text=f"Hi{sp}How{sp}Are{sp}You")
+        preview.config(text=f"Easier{sp}to{sp}read")
 
     def on_scale(v: str) -> None:
         if ui["snap"]:
@@ -541,10 +571,13 @@ def run_gui(ws: WideSpace, start_minimized: bool) -> None:
     scale.configure(command=on_scale)
 
     # --- try-it box
-    tk.Label(body, text="Try it here (type a few words):", font=(FONT, 10),
+    tk.Label(body, text="Try it here", font=(FONT, 10),
              bg=BG, fg=MUTED).pack(anchor="w", pady=(px(16), px(4)))
     box = tk.Text(body, width=36, height=3, wrap="word", font=(FONT, 13),
-                  relief="solid", bd=1, padx=8, pady=6)
+                  bg=CARD, fg=TEXT, insertbackground=TEXT, selectbackground=LINE,
+                  selectforeground=TEXT, relief="flat", bd=0,
+                  highlightthickness=1, highlightbackground=LINE,
+                  highlightcolor=GREEN, padx=8, pady=6)
     box.pack(fill="x")
 
     # --- start at login (Windows only)
@@ -581,11 +614,11 @@ def run_gui(ws: WideSpace, start_minimized: bool) -> None:
             root.destroy()
 
     ttk.Button(foot, text="Quit", command=quit_app).pack(side="right")
-    status.pack(anchor="w", pady=(px(8), 0))
+    status.pack(anchor="w", pady=(px(6), 0), after=row)   # right under the switch
     tk.Label(body, font=(FONT, 8), bg=BG, fg=MUTED, justify="left",
              wraplength=px(340),
-             text="Closing this window only minimizes it. WideSpace keeps "
-                  "running. Press Quit to stop it.").pack(anchor="w", pady=(px(6), 0))
+             text="Closing the window keeps WideSpace running. "
+                  "Quit stops it.").pack(anchor="w", pady=(px(6), 0))
 
     # --- refresh loop: never dies, also runs the keyboard-hook watchdog
     def tick() -> None:
