@@ -26,7 +26,6 @@ jobs:
           pyinstaller --noconfirm --clean --onefile --windowed
           --name WideSpace
           --icon icon.ico
-          --add-data "icon.ico;."
           --hidden-import pynput.keyboard._win32
           Main.py
 
