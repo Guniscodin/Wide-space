@@ -61,7 +61,6 @@ jobs:
         run: >
           pyinstaller --noconfirm --clean --onefile --windowed
           --name WideSpace
-          --add-data "icon.png:."
           Main.py
 
       - name: Upload artifact
