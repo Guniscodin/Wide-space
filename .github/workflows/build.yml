@@ -6,6 +6,9 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: read
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -19,27 +22,30 @@ jobs:
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller pynput
+          pip install -r requirements.txt pyinstaller
 
       - name: Build EXE
         run: >
           pyinstaller --noconfirm --clean --onefile --windowed
           --name WideSpace
           --icon icon.ico
+          --add-data "icon.ico;."
           --hidden-import pynput.keyboard._win32
           Main.py
+
+      - name: Checksum
+        shell: pwsh
+        run: |
+          $h = (Get-FileHash dist/WideSpace.exe -Algorithm SHA256).Hash.ToLower()
+          "$h  WideSpace.exe" | Out-File -Encoding ascii dist/WideSpace.exe.sha256
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: WideSpace-Windows
-          path: dist/WideSpace.exe
-
-      - name: Attach to release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/WideSpace.exe
+          path: |
+            dist/WideSpace.exe
+            dist/WideSpace.exe.sha256
 
   build-linux:
     runs-on: ubuntu-latest
@@ -55,22 +61,40 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y python3-tk
           python -m pip install --upgrade pip
-          pip install pyinstaller pynput python-xlib
+          pip install -r requirements.txt pyinstaller
 
       - name: Build binary
         run: >
-          pyinstaller --noconfirm --clean --onefile --windowed
-          --name WideSpace
+          pyinstaller --noconfirm --clean --onefile
+          --name WideSpace-linux
           Main.py
+
+      - name: Checksum
+        run: |
+          cd dist
+          sha256sum WideSpace-linux > WideSpace-linux.sha256
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: WideSpace-Linux
-          path: dist/WideSpace
+          path: |
+            dist/WideSpace-linux
+            dist/WideSpace-linux.sha256
 
-      - name: Attach to release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
         with:
-          files: dist/WideSpace
+          path: artifacts
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
